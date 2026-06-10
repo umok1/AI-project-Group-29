@@ -12,6 +12,11 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [trafficSegments, setTrafficSegments] = useState([]);
   const pathIntervalRef = React.useRef(null);
+  
+  // --- STATE CHỌN THUẬT TOÁN VÀ THỐNG KÊ ---
+  const [algorithm, setAlgorithm] = useState('astar'); 
+  const [routeStats, setRouteStats] = useState(null);  
+
   // --- TRẠNG THÁI ADMIN PANEL ---
   const [isAdmin, setIsAdmin] = useState(false); 
   const [adminType, setAdminType] = useState('congestion'); 
@@ -21,7 +26,6 @@ function App() {
   const refreshTrafficData = useCallback(async () => {
     try {
       const data = await getActiveTraffic();
-      // Backend trả về mảng các đoạn đường đang có sự cố
       if (data && Array.isArray(data)) {
         setTrafficSegments(data);
       }
@@ -29,60 +33,56 @@ function App() {
       console.error("Lỗi khi lấy dữ liệu traffic:", error);
     }
   }, []);
- 
-  // Tạo useEffect mới
+  
   useEffect(() => {
-    // Khi component bị đóng, xóa interval ngay lập tức
     return () => {
         if (pathIntervalRef.current) clearInterval(pathIntervalRef.current);
     };
-}, []); 
+  }, []); 
 
   useEffect(() => {
     refreshTrafficData();
   }, [refreshTrafficData]);
   
-  // Hiện từng node trên đường đi
+  // --- HIỆU ỨNG VẼ ĐƯỜNG TỪ TỪ ---
   const animatePath = (fullPath) => {
-    // Bước A: Xóa bỏ mọi interval đang chạy trước đó (nếu có)
     if (pathIntervalRef.current) {
         clearInterval(pathIntervalRef.current);
     }
-
-    // Bước B: Reset đường đi về rỗng để bắt đầu vẽ từ đầu
     setPath([]); 
     
     let currentIndex = 0;
-    const speed = 30; // Tốc độ vẽ: 30ms/node. Bạn có thể tăng lên 50 nếu muốn chậm hơn.
+    const speed = 30; // Tốc độ vẽ
 
-    // Bước C: Thiết lập interval để nạp dần tọa độ
     pathIntervalRef.current = setInterval(() => {
         if (currentIndex < fullPath.length) {
-            // Cập nhật path: lấy thêm 1 node mỗi lần chạy
             setPath(fullPath.slice(0, currentIndex + 1));
             currentIndex++;
         } else {
-            // Bước D: Khi vẽ xong thì dọn dẹp interval
             clearInterval(pathIntervalRef.current);
             pathIntervalRef.current = null;
         }
     }, speed);
-}; 
+  }; 
+
   // --- LOGIC TÌM ĐƯỜNG ĐỒNG BỘ VỚI BACKEND ---
-  const performRouting = async (s, e) => {
+  // Nhận thêm currentAlgo để đổi thuật toán là tìm đường lại ngay lập tức
+  const performRouting = async (s, e, currentAlgo = algorithm) => {
     if (!s || !e) return;
     setLoading(true);
+    setRouteStats(null); // Reset thống kê cũ
+    
     try {
       const data = await findPath({
         start_lat: parseFloat(s.lat),
         start_lon: parseFloat(s.lng),
         end_lat: parseFloat(e.lat),
-        end_lon: parseFloat(e.lng)
+        end_lon: parseFloat(e.lng),
+        algorithm: currentAlgo // Gửi thuật toán đang chọn xuống Backend
       });
 
       console.log("Dữ liệu nhận được:", data);
 
-      // 1. Xử lý trường hợp ngoài phạm vi (Geofencing)
       if (data.status === "outside_bounds") {
         alert(data.message); 
         setEnd(null); 
@@ -90,20 +90,18 @@ function App() {
         return;
       }
 
-      // 2. Xử lý thành công
       if (data.status === "success" && data.path && data.path.length > 0) {
-        //setPath(data.path)
         animatePath(data.path); 
+        
+        // Lưu metadata thống kê để hiển thị
+        setRouteStats(data.metadata);
 
-        // --- CẢI TIẾN QUAN TRỌNG: SNAP MARKER TO ROAD ---
-        // Lấy tọa độ Node thực tế đầu tiên và cuối cùng từ kết quả của Backend
+        // Snap Marker về đúng điểm đầu/cuối của đường đi thực tế
         const actualStart = data.path[0];
         const actualEnd = data.path[data.path.length - 1];
 
-        // Cập nhật lại vị trí Marker để chúng khớp hoàn toàn với điểm đầu/cuối của đường xanh
         setStart({ lat: actualStart.lat, lng: actualStart.lng });
         setEnd({ lat: actualEnd.lat, lng: actualEnd.lng });
-        // ----------------------------------------------
 
       } else {
         alert(data.message || "Không tìm thấy lộ trình khả dụng.");
@@ -120,15 +118,14 @@ function App() {
 
   // --- XỬ LÝ CLICK BẢN ĐỒ ---
   const handleMapSelection = async (latlng) => {
-    if (isAdmin) return; // Không làm gì nếu đang ở chế độ Admin
+    if (isAdmin) return; 
 
     if (!start || (start && end)) {
-      // Nếu chưa có start hoặc đã có cả cặp (vừa hoàn thành 1 tour) -> Reset chọn mới
       setStart(latlng);
       setEnd(null);
       setPath([]);
+      setRouteStats(null);
     } else {
-      // Đã có start, giờ chọn end
       setEnd(latlng);
       await performRouting(start, latlng);
     }
@@ -140,7 +137,6 @@ function App() {
 
     setLoading(true);
     try {
-      // Đồng bộ với Schema TrafficPathUpdate trong main.py
       const response = await updateTraffic({
         path_coordinates: pathCoords, 
         flood: type === 'flood' ? pValue : 0.0,
@@ -148,9 +144,8 @@ function App() {
       });
 
       if (response.status === "success") {
-        await refreshTrafficData(); // Load lại các vệt màu sự cố
+        await refreshTrafficData(); 
         
-        // CỰC KỲ QUAN TRỌNG: Nếu đang có sẵn đường đi, tự động tìm lại để xem kết quả "né"
         if (start && end) {
           await performRouting(start, end);
         }
@@ -172,7 +167,7 @@ function App() {
         if (response.status === "success") {
           setTrafficSegments([]);
           setPath([]);
-          // Tìm lại đường (sẽ quay về đường ngắn nhất gốc)
+          setRouteStats(null);
           if (start && end) await performRouting(start, end);
           alert(response.message);
         }
@@ -240,18 +235,55 @@ function App() {
             )}
         </div>
 
-        {/* SEARCH & STATUS */}
+        {/* --- CẢI TIẾN SEARCH PANEL --- */}
         <SearchPanel 
             label="📍 ĐIỂM XUẤT PHÁT"
-            placeholder={start ? `${start.lat.toFixed(5)}, ${start.lng.toFixed(5)}` : "Click bản đồ để chọn..."} 
-            onLocationSelect={(coords) => { setStart(coords); setPath([]); }} 
+            placeholder="Nhập địa điểm..." 
+            selectedCoord={start}
+            onLocationSelect={(coords) => { setStart(coords); setPath([]); setRouteStats(null); }} 
         />
         
         <SearchPanel 
             label="🏁 ĐIỂM ĐẾN"
-            placeholder={end ? `${end.lat.toFixed(5)}, ${end.lng.toFixed(5)}` : "Click bản đồ để chọn..."} 
+            placeholder="Nhập địa điểm ..." 
+            selectedCoord={end}
             onLocationSelect={(coords) => { setEnd(coords); if(start) performRouting(start, coords); }} 
         />
+        {/* ----------------------------- */}
+
+        {/* --- KHU VỰC CHỌN THUẬT TOÁN VÀ HIỂN THỊ THỐNG KÊ --- */}
+        <div style={{ margin: '15px 0', padding: '15px', background: '#f8f9fa', borderRadius: '10px', border: '1px solid #e9ecef' }}>
+            <div style={{ marginBottom: '10px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#2c3e50', display: 'block', marginBottom: '5px' }}>
+                    ⚙️ THUẬT TOÁN TÌM ĐƯỜNG
+                </label>
+                <select 
+                    value={algorithm} 
+                    onChange={(e) => {
+                        const newAlgo = e.target.value;
+                        setAlgorithm(newAlgo);
+                        if (start && end) performRouting(start, end, newAlgo);
+                    }}
+                    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #bdc3c7', outline: 'none' }}
+                >
+                    <option value="astar">A* Algorithm </option>
+                    <option value="dijkstra">Dijkstra Algorithm </option>
+                </select>
+            </div>
+
+            {/* BẢNG KẾT QUẢ THỐNG KÊ (Chỉ đo thời gian) */}
+            {routeStats && (
+                <div style={{ marginTop: '10px' }}>
+                    <div style={{ background: 'white', padding: '12px', borderRadius: '6px', border: '1px solid #eee', textAlign: 'center' }}>
+                        <div style={{ fontSize: '12px', color: '#7f8c8d', marginBottom: '4px' }}>⏱️ Thời gian chạy thuật toán</div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#e74c3c' }}>
+                            {routeStats.execution_time_ms} ms
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+        {/* ----------------------------- */}
 
         <div className="status-box" style={{ 
             marginTop: '15px', padding: '10px', background: '#f8f9fa', borderRadius: '8px',
@@ -267,7 +299,7 @@ function App() {
 
         {(start || end) && !isAdmin && (
           <button 
-            onClick={() => { setStart(null); setEnd(null); setPath([]); }}
+            onClick={() => { setStart(null); setEnd(null); setPath([]); setRouteStats(null); }}
             style={{
               marginTop: '15px', width: '100%', padding: '10px', background: '#e74c3c', 
               color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold'

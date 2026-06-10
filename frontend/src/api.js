@@ -10,8 +10,8 @@ const api = axios.create({
 });
 
 /**
- * Tìm đường đi tối ưu A*
- * @param {Object} routeData - {start_lat, start_lon, end_lat, end_lon}
+ * Tìm đường đi tối ưu (Hỗ trợ nhiều thuật toán: A*, Dijkstra)
+ * @param {Object} routeData - {start_lat, start_lon, end_lat, end_lon, algorithm}
  */
 export const findPath = async (routeData) => {
   try {
@@ -22,6 +22,8 @@ export const findPath = async (routeData) => {
     throw new Error(error.response?.data?.detail || "Lỗi server khi tìm đường");
   }
 };
+
+// ... (Giữ nguyên toàn bộ các hàm updateTraffic, getActiveTraffic, resetTraffic... bên dưới)
 
 /**
  * Cập nhật tình trạng giao thông dựa trên dải tọa độ vẽ (Vẽ nét đứt)

@@ -2,6 +2,7 @@ import os
 import sys
 import pickle
 import traceback
+import time  # ⏱️ Thêm thư viện time để đo thời gian chạy
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -13,6 +14,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 from src.data_processing.spatial_index import SpatialIndex
 from src.data_processing.traffic_manager import TrafficManager
 from src.algorithms.astar import AStarSolver
+from src.algorithms.dijkstra import DijkstraSolver  # 🧠 Import thêm DijkstraSolver
 from src.algorithms.cost_functions import CostCalculator
 
 app = FastAPI(title="HBT Routing System API - Hai Ba Trung District")
@@ -37,10 +39,11 @@ spatial_index = None
 traffic_mgr = None
 cost_calc = None
 solver = None
+dijkstra_solver = None  # Biến toàn cục cho Dijkstra
 
 @app.on_event("startup")
 async def startup_event():
-    global graph_data, spatial_index, traffic_mgr, cost_calc, solver
+    global graph_data, spatial_index, traffic_mgr, cost_calc, solver, dijkstra_solver
     
     print("\n--- 🚀 Đang khởi động hệ thống Backend ---")
     
@@ -66,12 +69,13 @@ async def startup_event():
             'nodes': clean_nodes
         }
 
-        # 3. Khởi tạo Logic Bus
+        # 3. Khởi tạo Logic Bus và CÁC THUẬT TOÁN
         traffic_mgr = TrafficManager()
         cost_calc = CostCalculator(traffic_manager=traffic_mgr)
         solver = AStarSolver(graph_data['graph'], graph_data['nodes'])
+        dijkstra_solver = DijkstraSolver(graph_data['graph'], graph_data['nodes'])  # Nạp Dijkstra
         
-        # 4. Tải Spatial Index (Dùng phương thức Load để khôi phục hoàn toàn KDTree)
+        # 4. Tải Spatial Index
         spatial_index = SpatialIndex.load_index(INDEX_PATH)
 
         if spatial_index:
@@ -90,6 +94,7 @@ class RouteRequest(BaseModel):
     start_lon: float
     end_lat: float
     end_lon: float
+    algorithm: str = "astar"  # ⚙️ Thêm trường algorithm, mặc định là A*
 
 class TrafficPathUpdate(BaseModel):
     path_coordinates: List[Tuple[float, float]]
@@ -100,35 +105,44 @@ class TrafficPathUpdate(BaseModel):
 
 @app.post("/find-path")
 def find_path(request: RouteRequest):
-    # Log debug tọa độ
-    print(f"\n[DEBUG] Yêu cầu tìm đường:")
-    print(f"📍 Bắt đầu: ({request.start_lat}, {request.start_lon})")
-    print(f"🏁 Kết thúc: ({request.end_lat}, {request.end_lon})")
-
-    if spatial_index is None or solver is None:
+    print(f"\n[DEBUG] Yêu cầu tìm đường bằng thuật toán: {request.algorithm.upper()}")
+    
+    if spatial_index is None or solver is None or dijkstra_solver is None:
         return {
             "status": "error",
             "message": "Hệ thống chưa sẵn sàng hoặc dữ liệu chưa được nạp."
         }
 
     try:
-        # Tìm Node gần nhất với ngưỡng 2.0km (Bù đắp cho các cạnh biên của quận)
+        # Tìm Node gần nhất với ngưỡng 0.7km
         u_start = spatial_index.find_nearest_node(request.start_lat, request.start_lon, max_distance_km=0.7)
         v_end = spatial_index.find_nearest_node(request.end_lat, request.end_lon, max_distance_km=0.7)
 
         if u_start is None or v_end is None:
-            # Trả về status cụ thể để Frontend hiện thông báo Geofencing
             return {
                 "status": "outside_bounds",
-                "message": f"Vị trí bạn chọn ({request.start_lat:.4f}, {request.start_lon:.4f}) nằm ngoài phạm vi hỗ trợ của quận Hai Bà Trưng!"
+                "message": f"Vị trí bạn chọn nằm ngoài phạm vi hỗ trợ của quận Hai Bà Trưng!"
             }
 
-        # Thực thi A* với chi phí động (Tắc đường/Ngập lụt)
-        path_ids = solver.solve(
-            start_node=u_start, 
-            goal_node=v_end, 
-            cost_fn=cost_calc.dynamic_cost
-        )
+        # ⏱️ BẮT ĐẦU BẤM GIỜ
+        start_time = time.time()
+
+        # ⚙️ CHẠY THUẬT TOÁN ĐƯỢC CHỌN (Mặc định không lưu history)
+        if request.algorithm == "dijkstra":
+            path_ids = dijkstra_solver.solve(
+                start_node=u_start, 
+                goal_node=v_end, 
+                cost_fn=cost_calc.dynamic_cost
+            )
+        else:
+            path_ids = solver.solve(
+                start_node=u_start, 
+                goal_node=v_end, 
+                cost_fn=cost_calc.dynamic_cost
+            )
+
+        # ⏱️ KẾT THÚC BẤM GIỜ
+        exec_time_ms = round((time.time() - start_time) * 1000, 2)
 
         if not path_ids:
             return {
@@ -139,10 +153,14 @@ def find_path(request: RouteRequest):
         # Chuyển ID Node thành tọa độ Map
         path_coords = [{"lat": graph_data['nodes'][node_id][0], "lng": graph_data['nodes'][node_id][1]} for node_id in path_ids]
 
+        # 📊 TRẢ VỀ METADATA THỐNG KÊ (Chỉ giữ lại thời gian)
         return {
             "status": "success",
             "path": path_coords,
-            "metadata": {"total_nodes": len(path_ids)}
+            "metadata": {
+                "algorithm": request.algorithm,
+                "execution_time_ms": exec_time_ms
+            }
         }
     except Exception as e:
         print(f"🔥 Runtime Error: {e}")
@@ -154,7 +172,6 @@ def update_traffic(update: TrafficPathUpdate):
         return {"status": "error", "message": "Hệ thống chưa sẵn sàng."}
 
     try:
-        # Lấy 2 đầu đoạn vẽ để xác định phạm vi phố
         start_pt = update.path_coordinates[0]
         end_pt = update.path_coordinates[-1]
 
@@ -164,12 +181,17 @@ def update_traffic(update: TrafficPathUpdate):
         if u_start is None or v_end is None:
             return {"status": "error", "message": "Vùng bạn vẽ nằm ngoài phạm vi bản đồ."}
 
-        # Tìm chuỗi node thực tế trên phố đó (dùng chi phí khoảng cách thuần túy)
+        # Dùng A* để vẽ đoạn đường quản lý sự cố (Mặc định không cần history)
         path_nodes = solver.solve(
             start_node=u_start, 
             goal_node=v_end, 
-            cost_fn=cost_calc.simple_distance_cost 
+            cost_fn=cost_calc.simple_distance_cost,
+            return_history=False
         )
+        
+        # Vì A* trả về thẳng list khi return_history=False (do code A* mới trả tuple khi True), ta cần xử lý
+        if isinstance(path_nodes, tuple):
+            path_nodes = path_nodes[0]
 
         if not path_nodes:
             return {"status": "error", "message": "Không tìm thấy đường nối thực tế để gán hệ số."}
@@ -177,7 +199,6 @@ def update_traffic(update: TrafficPathUpdate):
         updated_count = 0
         for i in range(len(path_nodes) - 1):
             u, v = path_nodes[i], path_nodes[i+1]
-            # Cập nhật 2 chiều để bẻ lái A* triệt để
             traffic_mgr.update_live_traffic(u, v, update.congestion, update.flood)
             traffic_mgr.update_live_traffic(v, u, update.congestion, update.flood)
             updated_count += 1

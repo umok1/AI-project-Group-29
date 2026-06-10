@@ -28,14 +28,15 @@ class AStarSolver:
         except (KeyError, TypeError):
             return self.INF_THRESHOLD
 
-    def solve(self, start_node, goal_node, cost_fn=None):
+    def solve(self, start_node, goal_node, cost_fn=None, return_history=False):
         """
         Tìm đường đi tối ưu A* với chi phí động.
+        Thêm tham số return_history để theo dõi số đỉnh đã duyệt.
         """
         # Kiểm tra node đầu cuối có tồn tại không
         if start_node not in self.nodes or goal_node not in self.nodes:
             print(f"Lỗi: Node {start_node} hoặc {goal_node} không tồn tại trong dữ liệu.")
-            return None
+            return (None, []) if return_history else None
 
         # Priority Queue: (f_score, current_node)
         open_set = []
@@ -53,17 +54,26 @@ class AStarSolver:
 
         # Tập hợp các node đã xử lý xong
         closed_set = set()
+        
+        # Mảng lưu vết các đỉnh đã được lấy ra khỏi open_set để thống kê
+        visited_order = []
 
         while open_set:
             # Lấy node có f_score thấp nhất
             current_f, current = heapq.heappop(open_set)
 
-            # Nếu đã đến đích
-            if current == goal_node:
-                return self._reconstruct_path(came_from, current)
-
+            # Bỏ qua nếu đã duyệt
             if current in closed_set:
                 continue
+                
+            # Ghi nhận đỉnh đang được quét
+            if return_history:
+                visited_order.append(current)
+
+            # Nếu đã đến đích
+            if current == goal_node:
+                path = self._reconstruct_path(came_from, current)
+                return (path, visited_order) if return_history else path
             
             closed_set.add(current)
 
@@ -102,6 +112,8 @@ class AStarSolver:
                     heapq.heappush(open_set, (f_score[neighbor], neighbor))
 
         # Không tìm thấy đường đi (có thể do bị bao vây bởi các đoạn ngập lụt)
+        if return_history:
+            return None, visited_order
         return None
 
     def _reconstruct_path(self, came_from, current):
