@@ -2,7 +2,7 @@ venv/
 __pycache__/
 *.pyc
 .env
-.pkl
+*.pkl
 
 # Thư viện Frontend
 node_modules/
