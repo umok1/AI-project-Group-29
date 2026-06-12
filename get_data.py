@@ -12,10 +12,7 @@ def convert_to_csv():
     print(f"🔍 Đang tìm file dữ liệu tại: {GRAPH_PATH}")
     
     if not os.path.exists(GRAPH_PATH):
-        print("❌ LỖI: Không tìm thấy file hbt_graph.pkl! Hãy kiểm tra lại thư mục.")
         return
-
-    print("⏳ Đang đọc dữ liệu từ file .pkl...")
     with open(GRAPH_PATH, 'rb') as f:
         data = pickle.load(f)
 
@@ -25,18 +22,16 @@ def convert_to_csv():
     # ==========================================
     # XỬ LÝ ĐỈNH (NODES)
     # ==========================================
-    print("🔄 Đang chuyển đổi danh sách Đỉnh (Nodes)...")
     nodes_list = [{"Node_ID": node_id, "Latitude": coords[0], "Longitude": coords[1]} 
                   for node_id, coords in nodes_data.items()]
     
     df_nodes = pd.DataFrame(nodes_list)
     df_nodes.to_csv(NODES_CSV_PATH, index=False, encoding='utf-8')
-    print(f"✅ Đã lưu {len(df_nodes):,} đỉnh tại:\n 👉 {NODES_CSV_PATH}")
-
+    
     # ==========================================
     # XỬ LÝ CẠNH (EDGES)
     # ==========================================
-    print("🔄 Đang chuyển đổi danh sách Cạnh (Edges)...")
+    
     edges_list = []
     for u, neighbors in graph_data.items():
         for v, properties in neighbors.items():
@@ -49,8 +44,10 @@ def convert_to_csv():
             })
 
     df_edges = pd.DataFrame(edges_list)
+    df_edges["Source_Node_u"] = pd.to_numeric(df_edges["Source_Node_u"])
+    df_edges["Target_Node_v"] = pd.to_numeric(df_edges["Target_Node_v"])
+    df_edges = df_edges.sort_values(by=["Source_Node_u", "Target_Node_v"])
     df_edges.to_csv(EDGES_CSV_PATH, index=False, encoding='utf-8')
-    print(f"✅ Đã lưu {len(df_edges):,} đoạn đường tại:\n 👉 {EDGES_CSV_PATH}")
 
 if __name__ == "__main__":
     convert_to_csv()

@@ -26,15 +26,12 @@ class OSMParser:
 
     def parse(self):
         if not os.path.exists(self.osm_path):
-            print(f"❌ Lỗi: Không tìm thấy file OSM tại: {self.osm_path}")
             return None, None
 
-        print(f"--- 🗺️ Bắt đầu xử lý bản đồ: {os.path.basename(self.osm_path)} ---")
         try:
             tree = ET.parse(self.osm_path)
             root = tree.getroot()
         except Exception as e:
-            print(f"❌ Lỗi định dạng file: {e}")
             return None, None
 
         # Bước 1: Thu thập Nodes - Ép kiểu ID về String
@@ -62,22 +59,21 @@ class OSMParser:
                     u, v = way_nodes[i], way_nodes[i+1]
                     
                     if is_reverse:
-                        self._add_edge(v, u, highway_type) # Đi ngược
+                        self._add_edge(v, u, highway_type,True) # Đi ngược
                     else:
-                        self._add_edge(u, v, highway_type) # Đi xuôi
+                        self._add_edge(u, v, highway_type,is_oneway) # Đi xuôi
                         if not is_oneway:
-                            self._add_edge(v, u, highway_type) # Đường 2 chiều
+                            self._add_edge(v, u, highway_type,False) # Đường 2 chiều
                 
                 way_count += 1
 
-        print(f"✅ Đã lọc {way_count} tuyến đường.")
         
         # Bước 3: Lọc cụm liên thông (SCC) - Đảm bảo đồ thị luôn tìm thấy đường
         self._filter_largest_component()
-        
+        self._reindex_nodes()
         return self.graph, self.nodes
 
-    def _add_edge(self, u, v, road_type):
+    def _add_edge(self, u, v, road_type, oneway_status=False):
         if u not in self.nodes or v not in self.nodes:
             return
             
@@ -87,11 +83,10 @@ class OSMParser:
         if u not in self.graph: 
             self.graph[u] = {}
             
-        self.graph[u][v] = {'weight': dist, 'type': road_type}
+        self.graph[u][v] = {'weight': dist, 'type': road_type, 'oneway':oneway_status}
 
     def _filter_largest_component(self):
         """Dùng NetworkX để lọc bỏ các vùng bị cô lập"""
-        print("🔍 Đang lọc cụm liên thông lớn nhất (SCC)...")
         
         nx_graph = nx.DiGraph()
         for u, neighbors in self.graph.items():
@@ -111,24 +106,40 @@ class OSMParser:
                 new_graph[u] = {v: data for v, data in self.graph[u].items() if v in largest_scc}
                 new_nodes[u] = self.nodes[u]
         
-        print(f"✅ Giữ lại {len(new_nodes)} nodes (Loại bỏ {len(self.nodes) - len(new_nodes)} nodes mồ côi).")
         self.graph = new_graph
         self.nodes = new_nodes
+
+    def _reindex_nodes(self):
+       
+        new_nodes = {}
+        new_graph = {}
+        mapping = {} 
+        
+        for new_id, old_id in enumerate(self.nodes.keys()):
+            mapping[old_id] = new_id
+            new_nodes[new_id] = self.nodes[old_id]
+            
+        for old_u, neighbors in self.graph.items():
+            new_u = mapping[old_u]
+            new_graph[new_u] = {}
+            for old_v, data in neighbors.items():
+                new_v = mapping[old_v]
+                new_graph[new_u][new_v] = data
+                
+        self.nodes = new_nodes
+        self.graph = new_graph
+         
 
     def save(self, output_path):
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
-        # 1. Lưu hbt_graph.pkl
         data = {'graph': self.graph, 'nodes': self.nodes}
         with open(output_path, 'wb') as f:
             pickle.dump(data, f)
         
-        # 2. Lưu spatial_index.pkl đồng bộ
         index_path = output_path.replace("hbt_graph.pkl", "spatial_index.pkl")
         si = SpatialIndex(self.nodes)
         si.save_index(index_path)
-        
-        print(f"📂 Đã xuất dữ liệu SẠCH sang processed/")
 
 if __name__ == "__main__":
     osm_file = os.path.join(BASE_DIR, "data", "raw", "map.osm")
