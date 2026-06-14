@@ -9,7 +9,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Tuple, Any
-
 # Thêm đường dẫn để FastAPI tìm thấy các module trong src
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
@@ -18,6 +17,7 @@ from src.data_processing.traffic_manager import TrafficManager
 from src.algorithms.astar import AStarSolver
 from src.algorithms.dijkstra import DijkstraSolver
 from src.algorithms.cost_functions import CostCalculator
+from src.utils.benchmark import run_routing_benchmark
 
 app = FastAPI(title="HBT Routing System API - Hai Ba Trung District")
 
@@ -97,6 +97,14 @@ class TrafficPathUpdate(BaseModel):
     path_coordinates: List[Any] 
     congestion: float = 1.0
     flood: float = 0.0
+
+class BenchmarkRequest(BaseModel):
+    start_lat: float
+    start_lon: float
+    end_lat: float
+    end_lon: float
+    algorithm: str = "astar" 
+    num_runs: int = 100  
 
 # --- ENDPOINTS ---
 @app.post("/find-path")
@@ -242,3 +250,50 @@ def get_active_traffic():
                 "penalty": info.get('flood') if info.get('flood', 0) > 0 else info.get('congestion', 1.0)
             })
     return active_segments
+
+@app.post("/benchmark")
+def run_benchmark(request: BenchmarkRequest):
+    if spatial_index is None or solver is None or dijkstra_solver is None:
+        return {"status": "error", "message": "Hệ thống chưa sẵn sàng."}
+
+    try:
+        u_start = spatial_index.find_nearest_node(request.start_lat, request.start_lon, max_distance_km=99999.0)
+        v_end = spatial_index.find_nearest_node(request.end_lat, request.end_lon, max_distance_km=99999.0)
+
+        if u_start is None or v_end is None:
+            return {"status": "error", "message": "Vị trí nằm ngoài phạm vi hỗ trợ."}
+
+        # Chọn thuật toán
+        current_solver = dijkstra_solver if request.algorithm == "dijkstra" else solver
+
+        # 🚀 GỌI HÀM TỪ FILE BENCHMARK.PY 
+        benchmark_result = run_routing_benchmark(
+            solver_instance=current_solver,
+            start_node=u_start,
+            goal_node=v_end,
+            cost_fn=cost_calc.dynamic_cost,
+            num_runs=request.num_runs
+        )
+        
+        if not benchmark_result:
+            return {"status": "error", "message": "Không tìm thấy đường đi để đo benchmark."}
+
+        # Ánh xạ ID ra tọa độ để gửi về Frontend vẽ đồ thị
+        path_coords = [{"lat": graph_data['nodes'][node_id][0], "lng": graph_data['nodes'][node_id][1]} for node_id in benchmark_result["path_ids"]]
+
+        # Trộn dữ liệu tọa độ với dữ liệu thống kê
+        return {
+            "status": "success",
+            "path": path_coords,
+            "metrics": {
+                "algorithm": request.algorithm,
+                "num_runs": benchmark_result["metrics"]["num_runs"],
+                "min_ms": benchmark_result["metrics"]["min_ms"],
+                "max_ms": benchmark_result["metrics"]["max_ms"],
+                "avg_ms": benchmark_result["metrics"]["avg_ms"],
+                "visited_nodes": benchmark_result["visited_nodes"],
+                "path_nodes": len(path_coords)
+            }
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Lỗi nội bộ Benchmark: {str(e)}"}
