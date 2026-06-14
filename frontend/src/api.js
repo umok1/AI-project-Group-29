@@ -23,7 +23,19 @@ export const findPath = async (routeData) => {
   }
 };
 
-// ... (Giữ nguyên toàn bộ các hàm updateTraffic, getActiveTraffic, resetTraffic... bên dưới)
+/**
+ * Chạy ép xung hệ thống để đo đạc hiệu năng (Dành cho Admin)
+ * @param {Object} benchmarkData - {start_lat, start_lon, end_lat, end_lon, algorithm, num_runs}
+ */
+export const runBenchmark = async (benchmarkData) => {
+  try {
+    const response = await api.post('/benchmark', benchmarkData);
+    return response.data;
+  } catch (error) {
+    console.error("Lỗi API runBenchmark:", error);
+    throw new Error(error.response?.data?.detail || "Lỗi server khi chạy Benchmark");
+  }
+};
 
 /**
  * Cập nhật tình trạng giao thông dựa trên dải tọa độ vẽ (Vẽ nét đứt)
@@ -85,7 +97,8 @@ export const getTrafficStatus = async () => {
 
 // Gom nhóm để export default nếu cần
 const apiService = { 
-    findPath, 
+    findPath,
+	runBenchmark,
     updateTraffic, 
     getTrafficStatus, 
     getActiveTraffic, 
