@@ -9,7 +9,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Tuple, Any
-
 # Thêm đường dẫn để FastAPI tìm thấy các module trong src
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
@@ -18,6 +17,7 @@ from src.data_processing.traffic_manager import TrafficManager
 from src.algorithms.astar import AStarSolver
 from src.algorithms.dijkstra import DijkstraSolver
 from src.algorithms.cost_functions import CostCalculator
+from src.utils.benchmark import run_routing_benchmark
 
 app = FastAPI(title="HBT Routing System API - Hai Ba Trung District")
 
@@ -97,7 +97,7 @@ class TrafficPathUpdate(BaseModel):
     path_coordinates: List[Any] 
     congestion: float = 1.0
     flood: float = 0.0
-    
+
 class BenchmarkRequest(BaseModel):
     start_lat: float
     start_lon: float
@@ -250,7 +250,7 @@ def get_active_traffic():
                 "penalty": info.get('flood') if info.get('flood', 0) > 0 else info.get('congestion', 1.0)
             })
     return active_segments
-    
+
 @app.post("/benchmark")
 def run_benchmark(request: BenchmarkRequest):
     if spatial_index is None or solver is None or dijkstra_solver is None:
@@ -274,7 +274,7 @@ def run_benchmark(request: BenchmarkRequest):
             cost_fn=cost_calc.dynamic_cost,
             num_runs=request.num_runs
         )
-
+        
         if not benchmark_result:
             return {"status": "error", "message": "Không tìm thấy đường đi để đo benchmark."}
 
