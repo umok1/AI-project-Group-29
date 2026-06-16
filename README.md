@@ -6,7 +6,7 @@
 hbt-routing-system/
 ├── data/                       # Quản lý dữ liệu bản đồ
 │   ├── raw/                    # Chứa file .osm gốc 
-│   └── processed/              # Dữ liệu đồ thị sau khi parse 
+│   └── processed/              # Dữ liệu đồ thị sau khi parse và dữ liệu tắc đường lấy từ Tom Tom API
 │
 ├── src/                        # Mã nguồn Backend
 │   ├── data_processing/        # Lớp xử lý dữ liệu 
@@ -20,7 +20,8 @@ hbt-routing-system/
 │   │   └── cost_functions.py   # Các hàm tính toán trọng số cạnh dựa trên tình trạng giao thông
 │   │
 │   ├── api/                    # Cổng giao tiếp API (FastAPI)
-│   │   └── main.py             # Khởi tạo server, nạp dữ liệu và xử lý các endpoint
+│   │   ├── main.py             # Khởi tạo server, nạp dữ liệu và xử lý các endpoint
+│   │   └── tomtom.py           # Tom Tom API cập nhật dữ liệu tắc đường theo thời gian thực
 │   │
 │   └── utils/                  # Các hàm tiện ích hỗ trợ
 │       └── geo_utils.py        # Chứa công cụ tính toán địa lý (haversine_distance)
