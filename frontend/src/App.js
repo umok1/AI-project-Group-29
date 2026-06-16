@@ -392,10 +392,10 @@ function App() {
                 </div>
             )}
         </div>
-		
-		<div style={{ background: '#fff3e0', padding: '15px', borderRadius: '10px', marginBottom: '15px', border: '1px solid #ffe0b2' }}>
+		{/* --- TOM TOM API --- */}
+		<div style={{ background: '#ebf5fb', padding: '15px', borderRadius: '10px', marginBottom: '15px', border: '1px solid #2980b9' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontWeight: 'bold', fontSize: '14px', color: '#e67e22' }}>TOM TOM API</span>
+                <span style={{ fontWeight: 'bold', fontSize: '14px', color: '#1a5276' }}>TOM TOM API</span>
                 <input 
                     type="checkbox" 
                     checked={autoTomTom} 
