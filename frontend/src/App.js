@@ -13,7 +13,7 @@ function App() {
   const [trafficSegments, setTrafficSegments] = useState([]);
   const pathIntervalRef = React.useRef(null);
   
-  // --- STATE CHỌN THUẬT TOÁN VÀ THỐNG KÊ ---
+  // --- TRẠNG THÁI CHỌN THUẬT TOÁN VÀ THỐNG KÊ ---
   const [visualMode, setVisualMode] = useState(false); 
   const [isVisualizing, setIsVisualizing] = useState(false); 
   const [algorithm, setAlgorithm] = useState('astar'); 
@@ -25,7 +25,7 @@ function App() {
   const [adminType, setAdminType] = useState('congestion'); 
   const [penalty, setPenalty] = useState(5.0); 
 
-  // 💡 STATE MỚI CHO TÍNH NĂNG BENCHMARK
+  // TRẠNG THÁI CHO TÍNH NĂNG BENCHMARK
   const [numRuns, setNumRuns] = useState(100);
   const [benchmarkResults, setBenchmarkResults] = useState(null);
   
