@@ -56,6 +56,7 @@ class AStarSolver:
         
         # Biến đếm số lượng đỉnh ĐÃ RÚT RA khỏi hàng đợi để xử lý
         visited_count = 0
+        visited_order = [] # Nhật ký loang màu
 
         while open_set:
             # Lấy node có f_score thấp nhất
@@ -68,11 +69,12 @@ class AStarSolver:
             # Ghi nhận đỉnh đang được quét
             if return_history:
                 visited_count += 1
+                visited_order.append(current)
 
             # Nếu đã đến đích
             if current == goal_node:
                 path = self._reconstruct_path(came_from, current)
-                return (path, visited_count) if return_history else path
+                return (path, visited_count, visited_order) if return_history else path
             
             closed_set.add(current)
 
@@ -112,7 +114,7 @@ class AStarSolver:
 
         # Không tìm thấy đường đi
         if return_history:
-            return None, visited_count
+            return None, visited_count, visited_order
         return None
 
     def _reconstruct_path(self, came_from, current):

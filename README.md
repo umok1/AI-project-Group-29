@@ -6,7 +6,7 @@
 hbt-routing-system/
 ├── data/                       # Quản lý dữ liệu bản đồ
 │   ├── raw/                    # Chứa file .osm gốc 
-│   └── processed/              # Dữ liệu đồ thị sau khi parse 
+│   └── processed/              # Dữ liệu đồ thị sau khi parse và dữ liệu tắc đường lấy từ Tom Tom API
 │
 ├── src/                        # Mã nguồn Backend
 │   ├── data_processing/        # Lớp xử lý dữ liệu 
@@ -20,7 +20,8 @@ hbt-routing-system/
 │   │   └── cost_functions.py   # Các hàm tính toán trọng số cạnh dựa trên tình trạng giao thông
 │   │
 │   ├── api/                    # Cổng giao tiếp API (FastAPI)
-│   │   └── main.py             # Khởi tạo server, nạp dữ liệu và xử lý các endpoint
+│   │   ├── main.py             # Khởi tạo server, nạp dữ liệu và xử lý các endpoint
+│   │   └── tomtom.py           # Tom Tom API cập nhật dữ liệu tắc đường theo thời gian thực
 │   │
 │   └── utils/                  # Các hàm tiện ích hỗ trợ
 │       └── geo_utils.py        # Chứa công cụ tính toán địa lý (haversine_distance)
@@ -38,3 +39,11 @@ hbt-routing-system/
 ├── .gitignore                  # Bỏ qua các file môi trường
 ├── requirements.txt            # Danh sách thư viện Python cần thiết (FastAPI, Uvicorn, v.v.)
 └── README.md                   # Tài liệu hướng dẫn dự án
+```
+
+Hướng dẫn chạy dự án:\
++) Mở new terminal\
++) Gõ lệnh python -m src.data_processing.osm_parser (Chỉ chạy một lần để xử lý dữ liệu)\
++) Gõ lệnh python -m uvicorn src.api.main:app --app-dir . --reload\
++) New terminal khác -> chuyển sang command prompt ->
+  gõ lần lượt 2 lệnh : cd frontend; npm start

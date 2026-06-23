@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://127.0.0.1:8000';
+const API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -23,7 +23,19 @@ export const findPath = async (routeData) => {
   }
 };
 
-// ... (Giữ nguyên toàn bộ các hàm updateTraffic, getActiveTraffic, resetTraffic... bên dưới)
+/**
+ * Chạy ép xung hệ thống để đo đạc hiệu năng (Dành cho Admin)
+ * @param {Object} benchmarkData - {start_lat, start_lon, end_lat, end_lon, algorithm, num_runs}
+ */
+export const runBenchmark = async (benchmarkData) => {
+  try {
+    const response = await api.post('/benchmark', benchmarkData);
+    return response.data;
+  } catch (error) {
+    console.error("Lỗi API runBenchmark:", error);
+    throw new Error(error.response?.data?.detail || "Lỗi server khi chạy Benchmark");
+  }
+};
 
 /**
  * Cập nhật tình trạng giao thông dựa trên dải tọa độ vẽ (Vẽ nét đứt)
@@ -32,14 +44,22 @@ export const findPath = async (routeData) => {
  */
 export const updateTraffic = async (pathData) => {
   try {
-    // Gửi yêu cầu lên endpoint mới nhận danh sách tọa độ
     const response = await api.post('/update-traffic', pathData);
     return response.data;
   } catch (error) {
     console.error("Lỗi API updateTraffic:", error);
-    // In ra chi tiết lỗi từ FastAPI để dễ debug
     const detail = error.response?.data?.detail;
     throw new Error(detail || "Không thể cập nhật đoạn đường vẽ");
+  }
+};
+
+export const tomtomUpdateTraffic = async () => {
+  try {
+    const response = await api.get('/tomtom-update-traffic');
+    return response.data;
+  } catch (error) {
+    console.error("Lỗi API tomtomUpdateTraffic:", error);
+    return null;
   }
 };
 
@@ -49,7 +69,6 @@ export const updateTraffic = async (pathData) => {
 export const getActiveTraffic = async () => {
   try {
     const response = await api.get('/active-traffic');
-    // Trả về mảng [{from, to, type, penalty}, ...]
     return Array.isArray(response.data) ? response.data : [];
   } catch (error) {
     console.error("Lỗi API getActiveTraffic:", error);
@@ -85,8 +104,10 @@ export const getTrafficStatus = async () => {
 
 // Gom nhóm để export default nếu cần
 const apiService = { 
-    findPath, 
+    findPath,
+    runBenchmark, // Đừng quên xuất khẩu hàm mới ở đây
     updateTraffic, 
+	tomtomUpdateTraffic,
     getTrafficStatus, 
     getActiveTraffic, 
     resetTraffic 

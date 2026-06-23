@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Polyline, Rectangle, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Polyline, Rectangle, useMapEvents, useMap, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -40,7 +40,8 @@ function ChangeView({ bounds }) {
 const MapView = ({ 
     startCoord, 
     endCoord, 
-    path, 
+    path,
+	visitedNodes,
     onMapClick, 
     onMapRightClick, 
     isAdminMode,
@@ -169,7 +170,23 @@ const MapView = ({
                             />
                         );
                     })}
-
+					
+					{/* VẼ HIỆU ỨNG AI ĐANG QUÉT (VISUAL MODE) */}
+                    {visitedNodes && visitedNodes.length > 0 && visitedNodes.map((node, idx) => (
+                        <CircleMarker 
+                            key={`visited-${idx}`}
+                            center={[node.lat, node.lng]}
+                            radius={5} // Độ to của chấm tròn
+                            pathOptions={{
+                                color: '#9b59b6', // Màu tím công nghệ
+                                fillColor: '#9b59b6',
+                                fillOpacity: 0.4,
+                                stroke: false, // Bỏ viền cho mượt
+                                interactive: false // Không cho click vào chấm tròn
+                            }}
+                        />
+                    ))}
+					
                     {/* LỘ TRÌNH A* CHÍNH */}
                     {path && path.length > 0 && (
                         <Polyline 
