@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://127.0.0.1:8000';
+const API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -53,6 +53,16 @@ export const updateTraffic = async (pathData) => {
   }
 };
 
+export const tomtomUpdateTraffic = async () => {
+  try {
+    const response = await api.get('/tomtom-update-traffic');
+    return response.data;
+  } catch (error) {
+    console.error("Lỗi API tomtomUpdateTraffic:", error);
+    return null;
+  }
+};
+
 /**
  * Lấy danh sách các đoạn đường sự cố để hiển thị lên bản đồ
  */
@@ -97,6 +107,7 @@ const apiService = {
     findPath,
     runBenchmark, // Đừng quên xuất khẩu hàm mới ở đây
     updateTraffic, 
+	tomtomUpdateTraffic,
     getTrafficStatus, 
     getActiveTraffic, 
     resetTraffic 

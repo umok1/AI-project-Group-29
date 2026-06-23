@@ -2,9 +2,11 @@ import os
 import sys
 import pickle
 import traceback
-import time  
-import heapq  # 💡 Thêm thư viện để chạy Dijkstra Vô hướng cho Admin
-from collections import defaultdict  # 💡 Thêm thư viện cấu trúc dữ liệu
+import time
+import json
+from datetime import datetime  
+import heapq
+from collections import defaultdict
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -34,6 +36,7 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "../../"))
 DATA_PATH = os.path.join(BASE_DIR, "data", "processed", "hbt_graph.pkl")
 INDEX_PATH = os.path.join(BASE_DIR, "data", "processed", "spatial_index.pkl")
+TOMTOM_DATA_PATH = os.path.join(BASE_DIR, "data", "processed", "tomtom_traffic_incidents.json")
 
 # Global variables
 graph_data = None
@@ -91,6 +94,7 @@ class RouteRequest(BaseModel):
     start_lon: float
     end_lat: float
     end_lon: float
+    visualize: bool = False 
     algorithm: str = "astar"
 
 class TrafficPathUpdate(BaseModel):
@@ -122,26 +126,29 @@ def find_path(request: RouteRequest):
 
         # Bật cờ return_history=True và hứng 2 biến trả về (path_ids, visited_count)
         if request.algorithm == "dijkstra":
-            path_ids, visited_count = dijkstra_solver.solve(
+            path_ids, visited_count, visited_order_ids = dijkstra_solver.solve(
                 start_node=u_start, goal_node=v_end, cost_fn=cost_calc.dynamic_cost, return_history=True
             )
         else:
-            path_ids, visited_count = solver.solve(
+            path_ids, visited_count, visited_order_ids = solver.solve(
                 start_node=u_start, goal_node=v_end, cost_fn=cost_calc.dynamic_cost, return_history=True
             )
-
+        if not request.visualize:
+            visited_order_ids = []
         # Xử lý trường hợp không tìm thấy đường
         if not path_ids:
             return {"status": "error", "message": "Khu vực bị cô lập."}
 
         # Map ID thành tọa độ để vẽ trên UI
         path_coords = [{"lat": graph_data['nodes'][node_id][0], "lng": graph_data['nodes'][node_id][1]} for node_id in path_ids]
+        visited_order = [{"lat": graph_data['nodes'][node_id][0], "lng": graph_data['nodes'][node_id][1]} for node_id in visited_order_ids]
 
         # Đẩy biến visited_count vào file JSON 
         return {
             "status": "success",
             "path": path_coords,
             "visited_count": visited_count,  # <-- Cột mốc quan trọng để giao diện bắt được
+            "visited_order": visited_order,
             "metadata": {"algorithm": request.algorithm}
         }
     except Exception as e:
@@ -166,10 +173,15 @@ def update_traffic(update: TrafficPathUpdate):
 
         lat1, lon1 = extract_lat_lon(start_pt)
         lat2, lon2 = extract_lat_lon(end_pt)
+        
+        #print(f"{lat1} {lon1}")
+        #print(f"{lat2} {lon2}")
 
-        u_start = spatial_index.find_nearest_node(lat1, lon1, max_distance_km=99999.0)
-        v_end = spatial_index.find_nearest_node(lat2, lon2, max_distance_km=99999.0)
-
+        u_start = spatial_index.find_nearest_node(lat1, lon1, max_distance_km=0.7)
+        v_end = spatial_index.find_nearest_node(lat2, lon2, max_distance_km=0.7)
+        
+        #print(f"{u_start} {v_end}")
+        
         if u_start is None or v_end is None:
             return {"status": "error", "message": "Lỗi dữ liệu: Không tìm thấy đỉnh nào trên đồ thị."}
 
@@ -227,6 +239,87 @@ def update_traffic(update: TrafficPathUpdate):
     except Exception as e:
         print(f"🔥 Lỗi update-traffic: {e}")
         return {"status": "error", "message": f"Lỗi nội bộ: {str(e)}"}
+        
+@app.get("/tomtom-update-traffic")
+def tomtom_update_traffic():
+    if not os.path.exists(TOMTOM_DATA_PATH):
+        print(f"❌ CRITICAL ERROR: Không tìm thấy file dữ liệu tại {TOMTOM_DATA_PATH}")
+        data = TomTom.get_traffic_incidents()
+        if not data:
+            print("❌ Khởi tạo thất bại do lỗi API.")
+            return
+    try:
+        with open(TOMTOM_DATA_PATH, "r", encoding="utf-8") as f:
+            # Nạp dữ liệu từ file vào biến
+            data = json.load(f)
+        print("✅ Nạp file thành công!")
+        timestamp = data.get("timestamp")
+        current_time = datetime.now().timestamp()
+        if current_time - timestamp >= 600:
+            incidents_list = data.get("incidents", [])
+            for incident in incidents_list:
+                geometry = incident.get("geometry", {})
+                if geometry.get("type") != "LineString":
+                    continue
+                
+                raw_coords = geometry.get("coordinates", [])
+                full_path = [(coord[1], coord[0]) for coord in raw_coords]
+                
+                if len(full_path) < 2:
+                    continue
+                
+                segment_coords = [full_path[0], full_path[-1]]
+
+                # Tạo một object TrafficPathUpdate riêng cho phân đoạn nhỏ này
+                segment_update = TrafficPathUpdate(
+                    path_coordinates=segment_coords,
+                    congestion=1.0,
+                    flood=0.0
+                )
+                update_traffic(segment_update)
+                
+            new_data = TomTom.get_traffic_incidents()
+            if not new_data:
+                print("❌ Khởi tạo thất bại do lỗi API, đang sử dụng dữ liệu cũ để cập nhật tình trạng giao thông...")
+            else:
+                data = new_data
+        
+        incidents_list = data.get("incidents", [])
+        for incident in incidents_list:
+            geometry = incident.get("geometry", {})
+            if geometry.get("type") != "LineString":
+                continue
+            
+            raw_coords = geometry.get("coordinates", [])
+            full_path = [(coord[1], coord[0]) for coord in raw_coords]
+            
+            if len(full_path) < 2:
+                continue
+            
+            properties = incident.get("properties", {})
+            magnitude = properties.get("magnitudeOfDelay", 0)
+            events = properties.get("events", [])
+            is_closed = any(event.get("code") == 401 for event in events)
+
+            if is_closed:
+                congestion_weight = 999.0
+            else:
+                congestion_weight = 1.0 + (magnitude * 2)
+
+            flood_weight = 0.0
+            
+            segment_coords = [full_path[0], full_path[-1]]
+            # Tạo một object TrafficPathUpdate riêng cho phân đoạn nhỏ này
+            segment_update = TrafficPathUpdate(
+                path_coordinates=segment_coords,
+                congestion=congestion_weight,
+                flood=flood_weight
+            )
+            update_traffic(segment_update)
+            
+        return {"status": "success", "message": "Gọi TomTom API thành công!"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.post("/reset-traffic")
 def reset_traffic():

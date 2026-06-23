@@ -19,10 +19,16 @@ class TrafficManager:
         v_id = self._normalize_id(v)
         
         key = (u_id, v_id)
-        self.live_updates[key] = {
-            'congestion': max(1.0, float(congestion_level)),
-            'flood': max(0.0, float(flood_level))
-        }
+        
+        #Xóa đoạn đường cần cập nhật nếu chỉ số tắc đường và ngập lụt là mặc định
+        if congestion_level == 1.0 and flood_level == 0.0:
+            self.live_updates.pop(key, None)
+            #print(key)
+        else:
+            self.live_updates[key] = {
+                'congestion': max(1.0, float(congestion_level)),
+                'flood': max(0.0, float(flood_level))
+            }
 
     def get_traffic_coefficient(self, u, v):
         """

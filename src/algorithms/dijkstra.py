@@ -27,7 +27,7 @@ class DijkstraSolver:
         # Kiểm tra tính hợp lệ của điểm đầu/cuối
         if start_node not in self.nodes or goal_node not in self.nodes:
             print(f"❌ Dijkstra Lỗi: Node {start_node} hoặc {goal_node} không tồn tại trong đồ thị.")
-            return (None, 0) if return_history else None
+            return (None, 0, []) if return_history else None
 
         # Priority Queue lưu trữ (chi_phí_g, node_hiện_tại)
         # Dijkstra luôn ưu tiên mở rộng đỉnh có chi phí từ điểm bắt đầu là nhỏ nhất
@@ -46,6 +46,7 @@ class DijkstraSolver:
         
         # Biến đếm số lượng đỉnh ĐÃ RÚT RA khỏi hàng đợi để xử lý
         visited_count = 0 
+        visited_order = [] # Nhật ký loang màu
 
         while open_set:
             # Lấy ra đỉnh có chi phí nhỏ nhất hiện tại
@@ -58,11 +59,12 @@ class DijkstraSolver:
             # ĐÃ SỬA: Dùng đúng cờ return_history
             if return_history:
                 visited_count += 1
+                visited_order.append(current)
 
-            # 🎯 ĐIỀU KIỆN DỪNG: Đã đến đích
+            # ĐIỀU KIỆN DỪNG: Đã đến đích
             if current == goal_node:
                 path = self._reconstruct_path(came_from, current)
-                return (path, visited_count) if return_history else path
+                return (path, visited_count, visited_order) if return_history else path
 
             # Đánh dấu đỉnh này đã xử lý xong
             closed_set.add(current)
@@ -84,7 +86,7 @@ class DijkstraSolver:
                 else:
                     weight = edge_data.get('weight', 1.0) # Trọng số mặc định nếu không có
 
-                # 🛑 Chặn đường: Nếu gặp ngập lụt nặng (weight = vô cực), không đi đường này
+                # Nếu gặp ngập lụt nặng (weight = vô cực), không đi đường này
                 if weight >= self.INF_THRESHOLD:
                     continue
 
@@ -101,7 +103,7 @@ class DijkstraSolver:
 
         # Nếu vòng lặp kết thúc mà không tìm thấy đích (Bị cô lập do ngập lụt tứ phía)
         if return_history:
-            return None, visited_count
+            return None, visited_count, visited_order
         return None
 
     def _reconstruct_path(self, came_from, current):

@@ -4,6 +4,7 @@ const TrafficLegend = () => {
     const legendItems = [
         { color: '#2ecc71', label: 'Điểm xuất phát', icon: '🟢' },
         { color: '#e74c3c', label: 'Điểm đích', icon: '🔴' },
+		{ color: '#c44cf77a', label: 'Các nút đã duyệt', icon: '🟣' },
         { color: '#3498db', label: 'Lộ trình tối ưu (A*)', icon: '🔵' },
         { color: '#f39c12', label: 'Cảnh báo ùn tắc', icon: '🟠' },
         { color: '#e74c3c', label: 'Khu vực ngập lụt', icon: '⚠️' },
